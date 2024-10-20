@@ -1,0 +1,143 @@
+SELECT City 
+FROM City_Table
+WHERE CityID IN(
+	SELECT CityID 
+	FROM Company_Table
+	WHERE CompanyCode IN(
+		SELECT CompanyCode 
+		FROM Employment_Table
+		/* 1A :- What is the minimum amount of money you would accept as a base salary for a professional job after graduation? (Annual rate )- 60000*/ 
+		WHERE (Annual_Salary >= 60000
+			/*1B :- Would you consider looking at job positions that did not have a stated salary? (Are NULLS allowed?) - Yes*/
+			OR Annual_Salary is NUll)
+		
+			AND
+			/*1C :- What are there specific job titles that you are more interested in than others? List 3 to 5. - Business Analyst, Data Analyst, IT Analyst*/
+			Job_Title LIKE '%Busines%Analyst'
+			OR Job_Title LIKE '%Data%Analyst'
+			OR Job_Title LIKE '%IT%Analyst')
+		
+		AND
+		/*1D:- What are the industries (banking, construction, etc.) that you are interested in?  - Finance, IT, Education */
+		(Industry LIKE 'Education'
+		OR Industry LIKE 'Financ%'/*Trying to accomodate all the finance or IT related Services or industries type*/
+		OR Industry LIKE 'IT%'
+		OR Industry LIKE 'Information Technology'))
+
+INTERSECT
+
+SELECT City 
+FROM City_Table
+WHERE CityID IN(
+	SELECT CityID
+	FROM Costofliving_Table
+	/*2B :- Adding  onto the previous question, what is your allotted renting budget? - 2000*/
+	WHERE AvgMonthly_Rent < 2000
+	AND
+	/*5C :- Do you require (public) transportation in the city you will be living in? - YES*/
+	Transportation_MonthlyPass IS NOT NULL
+	AND
+	/*2C :- What percentage of your (minimum) income are you comfortable spending on cost of living? - 45*/
+	(Avg_Utilities+AvgMonthly_Rent+Restaurants+Transportation_MonthlyPass+Groceries)*12 <= (60000*45)/100)
+	
+	
+
+INTERSECT
+
+/*3A :- At what point does crime become an issue? Please use one of the metrics found in your database. - Minimum Temperature in January -25 & Maximum Temperature in June 23*/
+SELECT city 
+FROM City_Table 
+WHERE CityID IN(
+	SELECT Weather_TABLE.CityID 
+	FROM Weather_TABLE INNER JOIN 
+	Weather_TABLE AS Table1 ON Weather_TABLE.CityID = Table1.CityID
+	WHERE
+	  (Weather_TABLE.month = 'june' AND Weather_TABLE.Max_Temp < 23) AND (Table1.month = 'January' AND Table1.Min_Temp>-25))
+
+INTERSECT
+
+/*3B :- At what point does crime become an issue? Please use one of the metrics found in your database. - When Crime index > 60*/
+SELECT city 
+FROM City_Table 
+WHERE CityID NOT IN(
+	SELECT CityID 
+	FROM Crime_Table
+	WHERE CrimeIndex > 60.00 )
+
+INTERSECT
+
+/*3D :- What are the specific demographic requirements (with the exception of population size)? - Adult > 49 and EL > 80*/
+SELECT city 
+FROM City_Table 
+WHERE CityID IN(
+	SELECT CityID
+	FROM Demographics_Table
+	WHERE EL > 80 
+	AND Adult > 49
+	/*5A :- Specify a minimum, maximum (or both) city population size. Use only multiples of 10,000 to answer. - 500000 to 1000000*/
+	AND TotalPopulation BETWEEN 50000 AND 1000000)
+
+INTERSECT
+
+
+SELECT City 
+FROM City_Table 
+WHERE CityID IN (
+	SELECT CityID 
+	FROM Company_Table 
+	WHERE CompanyCode IN (
+		SELECT CompanyCode 
+		FROM Employment_Table
+		WHERE Job_ID IN (
+		/*4B :- What skill level would you be looking for at this stage in industry? -  Fresher 0 Experience Years */
+			SELECT Job_ID 
+			FROM EmploymentSkill_Table
+			WHERE Experience_Years = 0 
+			AND
+			Skill_ID IN (
+			/* 4C :-  List the skills that you are interested in the job offerings, minimum of 3. - Data Analysis, MS Excel, Verbal, and written communication */
+
+			SELECT Skill_ID 
+			FROM Skill_Table 
+			WHERE Skill_Name IN(
+			 'Data Analysis', 'Microsoft Excel','Verbal and written communication')))))
+
+/*Is it possible to display the top three (3) most common skills required for a city when you search for potential employment? 
+In case of a positive answer, display them as the result of your query, along with the city they name of the belong. - Yes*/
+
+SELECT City,Skill_Name	
+FROM(
+	SELECT GreatestMerge.City,GreatestMerge.Skill_Name,ROW_NUMBER() OVER( PARTITION BY City ORDER BY SkillCount DESC) As RowNumber 
+	FROM(
+		SELECT CIty,  Skill_Name,COUNT(Skill_Name) AS SKillCount  FROM (
+			(SELECT City,Job_ID FROM(
+				(SELECT CITY, Companycode 
+				FROM City_Table INNER JOIN Company_Table 
+				ON City_Table.CityID = Company_Table.CityID)CityCompT
+
+				INNER JOIN
+
+				(SELECT Company_Table.CompanyCode, Job_ID 
+				FROM Company_Table INNER JOIN Employment_Table 
+				ON Company_Table.CompanyCode = Employment_Table.CompanyCode)CompEmpT
+
+				ON CityCompT.CompanyCode = CompEmpT.CompanyCode))GreatMerge1
+
+		INNER JOIN
+
+			(SELECT Job_ID,Skill_Name FROM(
+				(SELECT EmploymentSkill_table.Job_ID,SKill_ID
+				FROM EmploymentSkill_Table INNER JOIN Employment_Table
+				ON Employment_Table.Job_ID = Employment_Table.Job_ID)EmpEMpSKillT
+
+				INNER JOIN
+
+				(SELECT EmploymentSKill_Table.Skill_ID,Skill_Name
+				FROM EmploymentSkill_Table INNER JOIN Skill_Table
+				ON EmploymentSkill_Table.Skill_ID = Skill_Table.Skill_ID)EmpSkillNameT
+
+				ON EmpEMpSKillT.Skill_ID = EmpSkillNameT.Skill_ID))GreatMerge2
+
+		ON GreatMerge1.Job_ID = GreatMerge2.Job_ID)
+		GROUP BY City,Skill_Name) GreatestMerge) FinalSkillT
+WHERE RowNumber < 4
